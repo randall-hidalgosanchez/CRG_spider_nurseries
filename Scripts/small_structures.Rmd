@@ -1,0 +1,81 @@
+---
+title: "small_structures_analyses"
+output: html_document
+date: "`r Sys.Date()`"
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+
+knitr::opts_chunk$set(warning = FALSE, 
+                      message = FALSE)
+
+```
+
+```{r}
+library(tidyverse)
+library(skimr)
+library(GGally)
+library(DescTools)
+library(lme4)
+library(ggeffects)
+```
+
+```{r}
+df <- read_csv("./Datasets/small_spiders.csv")
+paleta <- c("#192639","#4EBCB8", "#FA9938", "#F4F4F5")
+```
+
+```{r}
+df_s<-df %>% 
+  mutate(structure=as.factor(structure),
+         site=as.factor(site),
+         data_entry_person=as.factor(data_entry_person),
+         month=as.factor(month),
+         year=as.factor(year),
+         date=lubridate::as_date(df$date),
+         .keep = "unused")
+
+```
+
+
+```{r}
+small_plots <- function(df_s) 
+{
+  lista <- list()
+  estructuras <- unique(df_s$structure)
+  
+  for (i in seq_along(estructuras))
+    {
+      estructura_actual <- estructuras[i]
+      
+      df_p <- df_s %>% filter(structure == estructura_actual)
+      
+      small_p <- ggplot(df_p, aes(x=date, y=area.cm2, group = 1))+
+        #stat_summary(geom = "line", fun = "mean") +
+        geom_line()+
+        geom_point()+
+        labs(title = estructura_actual)+
+        theme_bw()
+      
+      lista[[i]] <- small_p
+      
+    }
+  return(lista)
+}
+```
+
+```{r}
+plots <-  small_plots(df_s)
+plots[[5]]
+```
+
+
+```{r}
+df %>% 
+  ggplot(aes(x=date, y=area.cm2, col=site)) +
+  stat_summary(geom = "line", fun = "mean") +
+  facet_wrap(~structure, ncol = 4)
+```
+

@@ -1,0 +1,196 @@
+---
+title: "Clean Datasets (Big structures)"
+output: html_document
+date: "`r Sys.Date()`"
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+
+knitr::opts_chunk$set(warning = FALSE, 
+                      message = FALSE)
+
+```
+
+# Load libraries
+
+```{r}
+library(tidyverse)
+library(skimr)
+```
+
+# Load data
+
+```{r}
+Blanca<-read_csv(file = "./Datasets/BD_PBlanca_Monitoreo-amplio.csv")
+Guiri<-read_csv(file = "./Datasets/BD_Guiri_Monitoreo_amplio.csv")
+Pelonas<-read_csv(file = "./Datasets/BD_PPelonas_Monitoreo-amplio.csv")
+```
+
+# Check the data
+
+Remove tags data and duplicated images
+
+## Blanca
+
+```{r}
+skim(Blanca)
+
+NAs<-which(is.na(Blanca$photo.code))
+Blanca<-Blanca[-NAs,]
+
+NAs<-which(is.na(Blanca$gira))
+Blanca<-Blanca[-NAs,]
+
+NAs<-which(is.na(Blanca$digitador))
+Blanca<-Blanca[-NAs,]
+
+NAs<-which(is.na(Blanca$lado))
+Blanca<-Blanca[-NAs,]
+
+NAs<-which(is.na(Blanca$area.cm2))
+Blanca<-Blanca[-NAs,]
+
+NAs<-which(is.na(Blanca$blanq))
+Blanca<-Blanca[-NAs,]
+
+# View(Blanca[NAs,])
+```
+
+## Guiri
+
+```{r}
+skim(Guiri)
+
+NAs<-which(is.na(Guiri$photo.code))
+Guiri<-Guiri[-NAs,]
+
+NAs<-which(is.na(Guiri$area.cm2))
+Guiri<-Guiri[-NAs,]
+
+# View(Guiri[NAs,])
+```
+
+## Pelonas
+
+```{r}
+skim(Pelonas)
+
+NAs<-which(is.na(Pelonas$photo.code))
+Pelonas<-Pelonas[-NAs,]
+
+NAs<-which(is.na(Pelonas$lado))
+Pelonas<-Pelonas[-NAs,]
+
+NAs<-which(is.na(Pelonas$area.cm2))
+Pelonas<-Pelonas[-NAs,]
+
+#View(Pelonas[NAs,])
+```
+
+# Format
+
+Here, all three datasets will be formatted before combining them into one unique dataset.
+
+```{r}
+colnames(Pelonas)[19]<-"digitador"
+
+columns<-c("photo.code", "str.code", "lado", "site", "origin", "month", 
+           "year", "area.cm2", "num.frag", "mort.", "mort.parc", "perd",
+           "blanq", "digitador")
+
+filtered_blanca<-Blanca %>% 
+  select(all_of(columns))
+
+filtered_guiri<-Guiri %>% 
+  select(all_of(columns))
+
+filtered_pelonas<-Pelonas %>% 
+  select(all_of(columns))
+
+final_ds<-rbind(filtered_blanca, filtered_guiri, filtered_pelonas)
+```
+
+Some structures tag have been replaced. However the structures remain the same. For that reason, it's necessary to re-assign the number to keep a continuity.
+
+```{r}
+source("./Scripts/fix_structure_code.R")
+#final_ds$structure <- fix_structure(final_ds$structure)
+final_ds$str_fixed <- fix_structure(final_ds$str.code)
+```
+
+# Origin
+
+Each structure possesses coral fragments from specific origins. Those will be added to the datasets.
+
+```{r}
+source("./Scripts/asign_origin.R")
+
+final_ds$origin<-asign_origin(final_ds$str_fixed)
+
+NAs<-which(is.na(final_ds$origin))
+final_ds[NAs,]
+```
+
+
+# Fix the class/type of each variable
+
+```{r}
+final_ds2<-final_ds %>% 
+  mutate(structure=as.factor(str.code),
+         structure_fixed=as.factor(str_fixed),
+         site=as.factor(site),
+         face=as.factor(lado),
+         origin=as.factor(origin),
+         data_entry_person=as.factor(digitador),
+         month=as.factor(month),
+         year=as.factor(year), 
+         .keep = "unused")
+
+```
+
+Remove data analysed by Patricia, Andrea C. and Carmen. Patricia's data were recorded using wrong scales, whilst Andrea and Carmen's data are the same as Chiara's.
+
+```{r}
+levels(final_ds2$data_entry_person)
+
+final_ds2 <- final_ds2 %>% 
+  filter(!data_entry_person %in% c("Patricia", "Andrea C.", "Carmen")) %>% 
+  droplevels()
+```
+
+Now, we want to keep data from January 2020 to June 2024 
+
+```{r}
+final_ds2$date <- paste(final_ds2$year, final_ds2$month, sep = "-")
+final_ds2$date <- ym(final_ds2$date)
+
+final_ds2 <- final_ds2 %>% 
+    filter(between(date, as_date("2021-01-01"), as_date("2024-06-01")))
+```
+
+Varias fotografías están repetidas y con datos, por la misma persona.
+Estos los removí del dataset pero aún se mantienen en la base de drive. Por ejemplo, ambas Andrea y Priscilla hicieron la estructura 97. Santiago y Chiara también tienen estructuras repetidas. Esta revisión la hice a mano por lo que no hay código. El código siguiente fue usado únicamente para identificar las observaciones.
+
+```{r, eval=FALSE}
+n_occur <- data.frame(table(final_ds2$photo.code, 
+                            final_ds2$site,
+                            final_ds2$month,
+                            final_ds2$year))
+n_occur[n_occur$Freq > 1,]
+dups<-final_ds2[final_ds2$photo.code %in% n_occur$Var1[n_occur$Freq > 1],]
+dups %>% arrange(photo.code) %>% View()
+levels(as.factor(dups$photo.code))
+```
+
+Save the final dataset as a new csv.
+
+```{r}
+write.csv(final_ds2, 
+          file = "./Datasets/big_spiders.csv",
+          na = "NA",
+          row.names = F)
+```
+
+

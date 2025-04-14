@@ -1,0 +1,120 @@
+---
+title: "Clean Datasets (Small structures)"
+output: html_document
+date: "`r Sys.Date()`"
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+
+knitr::opts_chunk$set(warning = FALSE, 
+                      message = FALSE)
+
+```
+
+# Load libraries
+
+```{r}
+library(tidyverse)
+library(skimr)
+```
+
+# Load data
+
+```{r}
+pBlanca<-read_csv(file = "./Datasets/BD_AranasPeq_Blanca.csv")
+pCacique<-read_csv(file = "./Datasets/BD_AranasPeq_Cacique.csv")
+```
+
+# Check the data
+
+Remove tags data and duplicated images
+
+## Blanca (small structures)
+
+```{r}
+skim(pBlanca)
+
+NAs<-which(is.na(pBlanca$photo.code))
+pBlanca<-pBlanca[-NAs,]
+
+NAs<-which(is.na(pBlanca$area.cm2))
+pBlanca<-pBlanca[-NAs,]
+
+# View(pBlanca[NAs,])
+```
+
+## Cacique (small structures)
+
+```{r}
+skim(pCacique)
+
+# Image without photo code could be 3, I told Enrique to add the data
+NAs<-which(is.na(pCacique$photo.code))
+pCacique<-pCacique[-NAs,]
+
+NAs<-which(is.na(pCacique$area.cm2))
+pCacique<-pCacique[-NAs,]
+
+# View(pCacique[NAs,])
+```
+
+The first 7 rows of Blanca's dataset were measured by side so I'll remove those records (actually 8, but 1 of those was removed due to being a tag)
+
+```{r}
+pBlanca<-pBlanca[-(1:7),]
+```
+
+# Format
+
+Here, all three datasets will be formatted before combining them into one unique dataset.
+
+```{r}
+colnames(pBlanca)
+colnames(pCacique)
+
+columns<-c("photo.code", "str.code", "site", "month", 
+           "year", "area.cm2", "num.frag", "mort.", "mort.parc", "perd",
+           "blanq", "digitador")
+
+filtered_pBlanca<-pBlanca %>% 
+  select(all_of(columns))
+
+filtered_pCacique<-pCacique %>% 
+  select(all_of(columns))
+
+final_ds_p<-rbind(filtered_pBlanca, filtered_pCacique)
+```
+
+# Fix the class/type of each variable
+
+```{r}
+final_ds2_p<-final_ds_p %>% 
+  mutate(structure=as.factor(str.code),
+         site=as.factor(site),
+         data_entry_person=as.factor(digitador),
+         month=as.factor(month),
+         year=as.factor(year),
+         .keep = "unused")
+
+```
+
+Now, we want to keep data from January 2020 to June 2024 
+
+```{r}
+final_ds2_p$date <- paste(final_ds2_p$year, final_ds2_p$month, sep = "-")
+final_ds2_p$date <- ym(final_ds2_p$date)
+
+final_ds2_p <- final_ds2_p %>% 
+    filter(between(date, as_date("2021-01-01"), as_date("2024-06-01")))
+```
+
+Save the final dataset as a new csv.
+
+```{r}
+write.csv(final_ds2_p, 
+          file = "./Datasets/small_spiders.csv",
+          na = "NA",
+          row.names = F)
+```

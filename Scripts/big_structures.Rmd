@@ -1,0 +1,307 @@
+---
+title: "small_structures_analyses"
+output: html_document
+date: "`r Sys.Date()`"
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+
+knitr::opts_chunk$set(warning = FALSE, 
+                      message = FALSE)
+
+```
+
+Load the libraries
+
+```{r}
+library(tidyverse)
+library(skimr)
+library(GGally)
+library(DescTools)
+library(lme4)
+library(ggeffects)
+```
+
+Load the data
+
+```{r}
+df <- read_csv("./Datasets/big_spiders.csv")
+paleta <- c("#192639","#4EBCB8", "#FA9938", "#F4F4F5")
+```
+
+Format the data
+
+```{r}
+df<-df %>% 
+  mutate(structure=as.factor(structure),
+         structure_fixed=as.factor(structure_fixed),
+         site=as.factor(site),
+         face=as.factor(face),
+         origin=as.factor(origin),
+         data_entry_person=as.factor(data_entry_person),
+         month=as.factor(month),
+         year=as.factor(year), 
+         .keep = "unused")
+
+str(df)
+# glimpse(df)
+```
+
+Glance the data
+
+```{r}
+head(df)
+tail(df)
+
+min(df$area.cm2)
+max(df$area.cm2)
+```
+
+Some exploratory graphs
+
+```{r}
+df %>% 
+  select(area.cm2, num.frag, mort., mort.parc, blanq, date) %>% 
+  ggpairs()+theme_bw()
+```
+ 
+```{r}
+df %>% 
+  filter(site=="Playa Blanca") %>%
+  ggplot(aes(x=date, y=area.cm2, col=site)) +
+  stat_summary(geom = "line", fun = "mean") +
+  facet_wrap(~structure_fixed, ncol = 4)
+
+df %>% 
+  filter(site=="Playa Pelonas") %>%
+  ggplot(aes(x=date, y=area.cm2, col=site)) +
+  stat_summary(geom = "line", fun = "mean") +
+  facet_wrap(~structure_fixed, ncol = 4)
+
+df %>% 
+  filter(site=="Guiri") %>%
+  ggplot(aes(x=date, y=area.cm2, col=site)) +
+  stat_summary(geom = "line", fun = "mean") +
+  facet_wrap(~structure_fixed, ncol = 4)
+```
+
+As we can see, some structures have few records, so those will be filter out
+
+```{r}
+df <- df %>% 
+  filter(structure_fixed!="105")
+```
+
+
+Aggregate data to just 1 observation for each structure/month
+
+```{r}
+df_aggregate <- df %>%
+  group_by(site, structure_fixed, year, month) %>% 
+  summarise(area=mean(area.cm2), 
+            frags=mean(num.frag),
+            dead_fr=mean(mort.),
+            pr_dead=mean(mort.parc),
+            lost=mean(perd),
+            bleached=mean(blanq),
+            date=first(date),
+            origin=first(origin),
+            data_entry_person=first(data_entry_person)) %>% droplevels()
+```
+
+
+```{r}
+df_aggregate %>%
+  ggplot(aes(x=date, y=area, col=site))+
+  stat_summary(geom = "line", fun = "mean")+
+  stat_summary(geom = "point", fun = "mean")+
+  scale_colour_manual(values = paleta[c(3,1,2)])+
+  theme_classic()+
+  theme(legend.position = "top")
+```
+
+
+```{r}
+df_aggregate %>%
+  ggplot(aes(x=date, y=area, col=origin))+
+  stat_summary(geom = "line", fun = "mean")+
+  stat_summary(geom = "point", fun = "mean")+
+  scale_colour_manual(values = paleta[1:3])+
+  facet_wrap(~site)+
+  theme(legend.position = "top")
+```
+
+# Model the data
+
+```{r}
+hist(df_aggregate$area)
+shapiro.test(df_aggregate$area) # prueba normalidad
+goft::gamma_test(df_aggregate$area)
+```
+
+```{r}
+m0 <- glmer(area~1+(1|structure_fixed)+(1|origin),
+            family = Gamma(link = "log"),
+            data = df_aggregate)
+
+m1 <- glmer(area~site+(1|structure_fixed)+(1|origin),
+            family = Gamma(link = "log"),
+            data = df_aggregate)
+
+m2 <- glmer(area~date+(1|structure_fixed)+(1|origin),
+            family = Gamma(link = "log"),
+            data = df_aggregate)
+
+m3 <- glmer(area~site+date+(1|structure_fixed)+(1|origin),
+            family = Gamma(link = "log"),
+            data = df_aggregate)
+
+m4 <- glmer(area~site*date+(1|structure_fixed)+(1|origin),
+            family = Gamma(link = "log"),
+            data = df_aggregate)
+
+m5 <- glmer(area~site+month*year+(1|structure_fixed)+(1|origin),
+            family = Gamma(link = "log"),
+            data = df_aggregate)
+
+AIC(m0, m1, m2, m3, m4, m5)
+
+lmtest::lrtest(m3, m5)
+```
+
+```{r}
+model <- glmer(area~site+month*year+(1|structure_fixed)+(1|origin),
+               family = Gamma(link = "log"),
+               data = df_aggregate)
+
+summary(model)
+car::vif(m5)
+```
+
+```{r}
+new_data <- expand.grid(site=levels(df_aggregate$site),
+                        year=levels(df_aggregate$year),
+                        month=levels(df_aggregate$month),
+                        structure_fixed=levels(df_aggregate$structure_fixed),
+                        origin=levels(df_aggregate$origin))
+
+predict(model, new_data, re.form = NULL)
+```
+
+
+______________________________________________________
+
+```{r}
+growth_rates <- df %>%
+  group_by(structure_fixed, site, origin, date) %>%
+  summarise(mean_area = mean(area.cm2), .groups = "drop") %>%
+  group_by(structure_fixed, site, origin) %>%
+  arrange(date) %>%
+  summarise(
+    initial_date = first(date),
+    final_date = last(date),
+    initial_mean = first(mean_area),
+    final_mean = last(mean_area),
+    time_passed_years = as.numeric(difftime(final_date, initial_date, units = "days")) / 365.25,
+    growth_rate = (final_mean - initial_mean) / time_passed_years
+  )
+
+growth_rates <- growth_rates %>% filter(!is.na(origin)) %>% droplevels()
+
+View(growth_rates) 
+```
+
+```{r}
+hist(growth_rates$growth_rate)
+shapiro.test(growth_rates$growth_rate) # prueba normalidad
+as.data.frame(growth_rates) %>% ggplot(aes(x=growth_rate))+geom_density()
+```
+
+```{r}
+m0 <- lm(growth_rate~site,
+               #family = gaussian(link = "identity"),
+               data = growth_rates)
+
+m1 <- lm(growth_rate~origin,
+               #family = gaussian(link = "identity"),
+               data = growth_rates)
+
+m2 <- lm(growth_rate~site+origin,
+               #family = gaussian(link = "identity"),
+               data = growth_rates)
+
+m3 <- lm(growth_rate~site*origin,
+               #family = gaussian(link = "identity"),
+               data = growth_rates)
+
+m4 <- lm(growth_rate~site+origin+time_passed_years,
+               #family = gaussian(link = "identity"),
+               data = growth_rates)
+
+m5 <- lm(growth_rate~site*origin+time_passed_years,
+               #family = gaussian(link = "identity"),
+               data = growth_rates)
+
+AIC(m0, m1, m2, m3, m4, m5)
+lmtest::lrtest(m4, m5)
+lmtest::lrtest(m4, m3)
+```
+
+Usar m4
+
+```{r}
+m4 <- lm(growth_rate~site+origin+time_passed_years,
+               #family = gaussian(link = "identity"),
+               data = growth_rates)
+
+zero<-which(growth_rates$growth_rate<0)
+View(growth_rates[zero,])
+```
+
+```{r}
+df_aggregate %>%
+  filter(structure_fixed %in% c("16", "163", "164", "165", "166")) %>% 
+  ggplot(aes(x=date, y=area, col=origin))+
+  stat_summary(geom = "line", fun = "mean")+
+  stat_summary(geom = "point", fun = "mean")+
+  scale_colour_manual(values = paleta[c(3,1,2)])+
+  theme_classic()+
+  facet_grid(~structure_fixed)+
+  theme(legend.position = "top")
+```
+
+```{r}
+new_data <- expand.grid(site=levels(growth_rates$site),
+                        origin=levels(growth_rates$origin),
+                        time_passed_years=seq(min(growth_rates$time_passed_years),
+                                               max(growth_rates$time_passed_years),
+                                               0.01))
+
+new_data$predict <- predict(m4, new_data)
+```
+
+```{r}
+p <- new_data %>% ggplot(aes(time_passed_years, predict)) +
+  geom_point(aes(colour=origin)) +
+  geom_line(aes(colour = origin))+
+  facet_wrap(~site, nrow = 2, scales="free_y") + 
+  labs(x = "Tiempo", y = "Crecimiento") +
+  theme_bw()
+
+p
+```
+
+```{r}
+modelo_con_interaccion<-lm(growth_rate~site*origin+time_passed_years,
+               #family = gaussian(link = "identity"),
+               data = growth_rates)
+
+modelo_sin_interaccion <- lm(growth_rate ~ site + origin + time_passed_years, data = growth_rates)
+
+anova(modelo_sin_interaccion, modelo_con_interaccion)
+
+# Solamente el intercepto varía
+```
+
