@@ -18,7 +18,7 @@ knitr::opts_chunk$set(warning = FALSE,
 ```{r}
 library(tidyverse)
 library(skimr)
-```
+``` 
 
 # Load data
 
@@ -101,13 +101,13 @@ columns<-c("photo.code", "str.code", "lado", "site", "origin", "month",
            "blanq", "digitador")
 
 filtered_blanca<-Blanca %>% 
-  select(all_of(columns))
+  dplyr::select(all_of(columns))
 
 filtered_guiri<-Guiri %>% 
-  select(all_of(columns))
+  dplyr::select(all_of(columns))
 
 filtered_pelonas<-Pelonas %>% 
-  select(all_of(columns))
+  dplyr::select(all_of(columns))
 
 final_ds<-rbind(filtered_blanca, filtered_guiri, filtered_pelonas)
 ```
@@ -183,6 +183,15 @@ dups<-final_ds2[final_ds2$photo.code %in% n_occur$Var1[n_occur$Freq > 1],]
 dups %>% arrange(photo.code) %>% View()
 levels(as.factor(dups$photo.code))
 ```
+
+Por último, es necesario censurar los nombres de los digitadores.
+
+```{r}
+levels(final_ds2$data_entry_person)<-paste("Digitador",
+                                           as.character(seq(1,15,1)), 
+                                           sep = "_")
+```
+
 
 Save the final dataset as a new csv.
 

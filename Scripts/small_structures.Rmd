@@ -20,11 +20,16 @@ library(GGally)
 library(DescTools)
 library(lme4)
 library(ggeffects)
+library(emmeans)
+library(glmmTMB)
 ```
 
 ```{r}
 df <- read_csv("./Datasets/small_spiders.csv")
-paleta <- c("#192639","#4EBCB8", "#FA9938", "#F4F4F5")
+paleta <- c("Playa Blanca" = "#192639", 
+            "Playa Pelonas" = "#4EBCB8", 
+            "Guiri" = "#FA9938", 
+              "Cacique" = "#9E1B32")
 ```
 
 ```{r}
@@ -67,15 +72,153 @@ small_plots <- function(df_s)
 ```
 
 ```{r}
-plots <-  small_plots(df_s)
+plots <- small_plots(df_s)
 plots[[5]]
 ```
 
 
 ```{r}
-df %>% 
+df_s %>% 
   ggplot(aes(x=date, y=area.cm2, col=site)) +
   stat_summary(geom = "line", fun = "mean") +
   facet_wrap(~structure, ncol = 4)
 ```
+
+```{r, echo=FALSE, eval=FALSE}
+id_date_ranges <- df_s  |> 
+  group_by(structure)  |> 
+  summarise(
+    first_date = min(date, na.rm = TRUE),
+    last_date = max(date, na.rm = TRUE)
+  ) |> View()
+```
+
+```{r}
+df_3 <- df_s |> 
+  filter(as.numeric(as.character(structure)) 
+         %in% c(58:60,62,64,66,99,115,139,140,143,144,146:151,
+                154,155,375,378:380,394,395)) |> 
+  filter(date>="2023-04-01") |> 
+  droplevels()
+
+colSums(is.na(df_3))
+```
+
+```{r}
+df_3 %>%
+  filter(site == "Playa Blanca") |> 
+  ggplot(aes(x=date, y=area.cm2, col=site)) +
+  stat_summary(geom = "line", fun = "mean") +
+  facet_wrap(~structure, ncol = 4)
+```
+
+
+```{r}
+hist(df_3$area.cm2)
+shapiro.test(df_3$area.cm2) 
+qqplot(df_3$area.cm2, rnorm(53,mean = 339.0217, sd = 175.3311))  
+
+```
+
+
+```{r}
+# Todas las observaciones de Cacique inician en febrero 2024
+m1 <- lmer(area.cm2 ~ poly(date, 3) + (1|structure),
+            data = df_3)
+
+summary(m1)
+plot(m1)
+DHARMa::simulateResiduals(fittedModel = m1, plot = TRUE)
+```
+
+```{r}
+min(df_3$date)
+max(df_3$date)
+
+new_data <- expand.grid(date = seq(as.Date("2023-04-01"),
+                                        as.Date("2024-06-01"),
+                                        by = "month"),
+                        site = levels(df_3$site),
+                        structure=levels(df_3$structure))
+                        
+new_data$predicted <- predict(m1, newdata = new_data, re.form = NULL)
+
+ggplot(new_data, aes(x = date, y = predicted, col=site)) +
+  stat_summary(geom = "line", fun = "mean", linewidth = 1) +
+  labs(y = "Predicted area (cm²)", x = "Date")+
+  scale_color_manual(values = paleta[3])+
+  theme_classic()+
+  theme(legend.position = "none",
+        legend.title = element_blank()) 
+```
+
+```{r}
+ggplot(df_3, aes(x = date, y = area.cm2)) +
+  stat_summary(geom = "line", fun = "mean", linewidth = 1) +
+  #geom_point()+
+  labs(y = "Predicted area (cm²)", x = "Date")+
+  scale_color_manual(values = paleta[3])+
+  theme_classic()+
+  theme(legend.position = "top",
+        legend.title = element_blank()) 
+```
+
+
+## Cacique
+
+```{r}
+df_4 <- df_s |> 
+  filter(site == "Cacique") |>  
+  droplevels()
+
+df_4 %>% 
+  ggplot(aes(x=date, y=area.cm2)) +
+  stat_summary(geom = "line", fun = "mean") +
+  facet_wrap(~structure, ncol = 4)
+
+
+hist(df_4$area.cm2)
+shapiro.test(df_4$area.cm2)
+
+m2 <- glmmTMB(area.cm2 ~ poly(date, 2) + (1|structure),
+            data = df_4,
+            family = tweedie())
+
+DHARMa::simulateResiduals(fittedModel = m2, plot = TRUE)
+```
+
+```{r}
+# february 2024 - june 2024
+min(df_4$date)
+max(df_4$date)
+
+new_data <- expand.grid(date = seq(as.Date("2024-02-01"),
+                                        as.Date("2024-06-01"),
+                                        by = "month"),
+                        site = levels(df_4$site),
+                        structure=levels(df_4$structure))
+                        
+new_data$predicted <- predict(m2, newdata = new_data, re.form = NULL)
+
+ggplot(new_data, aes(x = date, y = predicted, col=site)) +
+  stat_summary(geom = "line", fun = "mean", linewidth = 1) +
+  labs(y = "Predicted area (cm²)", x = "Date")+
+  scale_color_manual(values = paleta[3])+
+  theme_classic()+
+  theme(legend.position = "none",
+        legend.title = element_blank()) 
+```
+
+
+```{r}
+ggplot(df_4, aes(x = date, y = area.cm2)) +
+  #stat_summary(geom = "line", fun = "mean", linewidth = 1) +
+  geom_point()+
+  labs(y = "Predicted area (cm²)", x = "Date")+
+  scale_color_manual(values = paleta[3])+
+  theme_classic()+
+  theme(legend.position = "top",
+        legend.title = element_blank()) 
+```
+
 

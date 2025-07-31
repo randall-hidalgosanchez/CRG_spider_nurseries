@@ -1,13 +1,14 @@
 ---
-title: "small_structures_analyses"
-output: html_document
+title: "big_structures_analyses"
+output:
+  pdf_document: default
+  html_document: default
 date: "`r Sys.Date()`"
-editor_options: 
+editor_options:
   chunk_output_type: console
 ---
 
 ```{r setup, include=FALSE}
-
 knitr::opts_chunk$set(warning = FALSE, 
                       message = FALSE)
 
@@ -17,24 +18,34 @@ Load the libraries
 
 ```{r}
 library(tidyverse)
-library(skimr)
-library(GGally)
-library(DescTools)
 library(lme4)
-library(ggeffects)
+library(glmmTMB)
+library(mgcv)
+library(DHARMa)
+library(sjPlot)
+library(MASS)
+library(GGally)
+library(emmeans)
+library(performance)
+library(patchwork)
 ```
 
 Load the data
 
 ```{r}
+setwd("C:/Users/User/Desktop/Git/CRG_spider_nurseries")
+
 df <- read_csv("./Datasets/big_spiders.csv")
-paleta <- c("#192639","#4EBCB8", "#FA9938", "#F4F4F5")
+paleta <- c("Playa Blanca" = "#192639", 
+            "Playa Pelonas" = "#4EBCB8", 
+            "Guiri" = "#FA9938", 
+              "Cacique" = "#9E1B32")
 ```
 
 Format the data
 
 ```{r}
-df<-df %>% 
+df<-df |>  
   mutate(structure=as.factor(structure),
          structure_fixed=as.factor(structure_fixed),
          site=as.factor(site),
@@ -49,259 +60,771 @@ str(df)
 # glimpse(df)
 ```
 
+```{r}
+# Pasar datos a area total por estructura
+df1 <- df |> 
+  group_by(date, site, origin, structure_fixed) |> 
+  summarise(area.cm2 = sum(area.cm2, na.rm = T)) |> 
+  ungroup()
+
+```
+
+
 Glance the data
 
 ```{r}
-head(df)
-tail(df)
+head(df1)
+tail(df1)
 
-min(df$area.cm2)
-max(df$area.cm2)
+min(df1$area.cm2)
+max(df1$area.cm2)
 ```
 
 Some exploratory graphs
 
 ```{r}
-df %>% 
-  select(area.cm2, num.frag, mort., mort.parc, blanq, date) %>% 
+df1 |>  
+  dplyr::select(area.cm2, num.frag, mort., mort.parc, blanq, date) |> 
   ggpairs()+theme_bw()
 ```
  
+Area of each structure by site. 
+ 
 ```{r}
-df %>% 
-  filter(site=="Playa Blanca") %>%
+df1 %>% 
+  filter(site=="Playa Blanca")  |> 
   ggplot(aes(x=date, y=area.cm2, col=site)) +
   stat_summary(geom = "line", fun = "mean") +
-  facet_wrap(~structure_fixed, ncol = 4)
+  facet_wrap(~structure_fixed, ncol = 4) + 
+  theme(legend.position = "top")
 
-df %>% 
-  filter(site=="Playa Pelonas") %>%
+df1 %>% 
+  filter(site=="Playa Pelonas")  |> 
   ggplot(aes(x=date, y=area.cm2, col=site)) +
   stat_summary(geom = "line", fun = "mean") +
-  facet_wrap(~structure_fixed, ncol = 4)
+  facet_wrap(~structure_fixed, ncol = 4) + 
+  theme(legend.position = "top")
 
-df %>% 
-  filter(site=="Guiri") %>%
+df1 %>% 
+  filter(site=="Guiri")  |> 
   ggplot(aes(x=date, y=area.cm2, col=site)) +
   stat_summary(geom = "line", fun = "mean") +
-  facet_wrap(~structure_fixed, ncol = 4)
+  facet_wrap(~structure_fixed, ncol = 4) + 
+  theme(legend.position = "top")
+```
+
+```{r, echo=FALSE, eval=FALSE}
+# this was to check which structures have data for that time frame
+id_date_ranges <- df1  |> 
+  group_by(structure_fixed)  |> 
+  summarise(
+    first_date = min(date, na.rm = TRUE),
+    last_date = max(date, na.rm = TRUE)
+  ) |> View()
 ```
 
 As we can see, some structures have few records, so those will be filter out
 
-```{r}
-df <- df %>% 
+```{r, echo=TRUE, eval=FALSE}
+df1 <- df1 |> 
   filter(structure_fixed!="105")
 ```
 
-
-Aggregate data to just 1 observation for each structure/month
-
-```{r}
-df_aggregate <- df %>%
-  group_by(site, structure_fixed, year, month) %>% 
-  summarise(area=mean(area.cm2), 
-            frags=mean(num.frag),
-            dead_fr=mean(mort.),
-            pr_dead=mean(mort.parc),
-            lost=mean(perd),
-            bleached=mean(blanq),
-            date=first(date),
-            origin=first(origin),
-            data_entry_person=first(data_entry_person)) %>% droplevels()
-```
-
+Many other structures have numerous observations but they do not comprehend all the entire time. Thus, only structures with data from january 2021 to may 2024 (because there's no data for june, from Güiri)
 
 ```{r}
-df_aggregate %>%
-  ggplot(aes(x=date, y=area, col=site))+
-  stat_summary(geom = "line", fun = "mean")+
-  stat_summary(geom = "point", fun = "mean")+
-  scale_colour_manual(values = paleta[c(3,1,2)])+
-  theme_classic()+
-  theme(legend.position = "top")
-```
-
-
-```{r}
-df_aggregate %>%
-  ggplot(aes(x=date, y=area, col=origin))+
-  stat_summary(geom = "line", fun = "mean")+
-  stat_summary(geom = "point", fun = "mean")+
-  scale_colour_manual(values = paleta[1:3])+
-  facet_wrap(~site)+
-  theme(legend.position = "top")
+df_1 <- df1 |> 
+  filter(as.numeric(as.character(structure_fixed)) 
+         %in% c(6:15, 169:172)) |> 
+  filter(date<="2024-05-01") |> 
+  droplevels()
 ```
 
 # Model the data
-
+First, we need to check the distribution of the data.
 ```{r}
-hist(df_aggregate$area)
-shapiro.test(df_aggregate$area) # prueba normalidad
-goft::gamma_test(df_aggregate$area)
+hist(df_1$area.cm2)
+shapiro.test(df_1$area.cm2) # prueba normalidad
 ```
 
+The data is not normally distributed, so we need to use a different model.
+Testing different models to find the better one. 
+
+# linear model 
+This model is not appropriate because it does not fit the data. But it is used as a comparison with the other models.
+
 ```{r}
-m0 <- glmer(area~1+(1|structure_fixed)+(1|origin),
-            family = Gamma(link = "log"),
-            data = df_aggregate)
-
-m1 <- glmer(area~site+(1|structure_fixed)+(1|origin),
-            family = Gamma(link = "log"),
-            data = df_aggregate)
-
-m2 <- glmer(area~date+(1|structure_fixed)+(1|origin),
-            family = Gamma(link = "log"),
-            data = df_aggregate)
-
-m3 <- glmer(area~site+date+(1|structure_fixed)+(1|origin),
-            family = Gamma(link = "log"),
-            data = df_aggregate)
-
-m4 <- glmer(area~site*date+(1|structure_fixed)+(1|origin),
-            family = Gamma(link = "log"),
-            data = df_aggregate)
-
-m5 <- glmer(area~site+month*year+(1|structure_fixed)+(1|origin),
-            family = Gamma(link = "log"),
-            data = df_aggregate)
-
-AIC(m0, m1, m2, m3, m4, m5)
-
-lmtest::lrtest(m3, m5)
+m0 <- lm(area.cm2 ~ date + site, data = df_1)
+summary(m0)
 ```
 
-```{r}
-model <- glmer(area~site+month*year+(1|structure_fixed)+(1|origin),
-               family = Gamma(link = "log"),
-               data = df_aggregate)
-
-summary(model)
-car::vif(m5)
-```
+A more appropiate model could be the gamma model; however, the data contains zeros and gamma models do not handle zeros.
+So, a tweedie model is used instead.
 
 ```{r}
-new_data <- expand.grid(site=levels(df_aggregate$site),
-                        year=levels(df_aggregate$year),
-                        month=levels(df_aggregate$month),
-                        structure_fixed=levels(df_aggregate$structure_fixed),
-                        origin=levels(df_aggregate$origin))
+# Otros mdelos:
 
-predict(model, new_data, re.form = NULL)
+# gamma distribution model para datos por araña y no por lado
+m1 <- glmmTMB(area.cm2 ~ date + site + (1|structure_fixed), 
+              data = df_1, 
+              family = Gamma(link = "log"))
+
+# gamma pero polynomial
+m2 <- glmmTMB(area.cm2 ~ poly(date, 2) * site + (1|structure_fixed),
+                 data = df_1,
+                 family = Gamma(link = "log"))
+
+# log-normal
+m3 <- glmmTMB(log(area.cm2) ~ date * site + (1|structure_fixed),
+              family = gaussian(),
+              data = df_1)
+
+m4 <- glmmTMB(log(area.cm2) ~ poly(date, 2) * site + (1|structure_fixed),
+              family = gaussian(),
+              data = df_1)
+
+m6 <- glmmTMB(area.cm2 ~ poly(date, 2) * site + (1|structure_fixed),
+              family = tweedie(),
+              data = df_1)
+
+m5 <- lm(log(area.cm2) ~ date + site, data = df_1)
+
+DHARMa::simulateResiduals(fittedModel = m4, plot = TRUE)
+# aparentemente el modelo log polybomial es el mejor (m4)
 ```
 
 
-______________________________________________________
+```{r}
+m1 <- glmmTMB(area.cm2 ~ date + site, 
+              data = df_1, 
+              family = tweedie(link = "log"))
+
+```
+
+The data also contains observations through time, so a random effect is added to the model.
+```{r}
+m2 <- glmmTMB(area.cm2 ~ date + site + (1|structure_fixed),
+                 data = df_1,
+                 family = tweedie())
+
+```
+
+Since the data is not linear, a polynomial term is added to the model.
+```{r}
+m3 <- glmmTMB(area.cm2 ~ poly(date, 2) + site + (1|structure_fixed),
+                 data = df_1,
+                 family = tweedie())
+
+```
+
+As the data includes zeros, a zero-inflated model could be used.
 
 ```{r}
-growth_rates <- df %>%
-  group_by(structure_fixed, site, origin, date) %>%
-  summarise(mean_area = mean(area.cm2), .groups = "drop") %>%
-  group_by(structure_fixed, site, origin) %>%
-  arrange(date) %>%
-  summarise(
-    initial_date = first(date),
-    final_date = last(date),
-    initial_mean = first(mean_area),
-    final_mean = last(mean_area),
-    time_passed_years = as.numeric(difftime(final_date, initial_date, units = "days")) / 365.25,
-    growth_rate = (final_mean - initial_mean) / time_passed_years
+m4 <- glmmTMB(area.cm2 ~ poly(date, 2) + site + (1|structure_fixed),
+                 data = df_1,
+                 ziformula = ~ 1,
+                 family = tweedie())
+
+```
+
+Test for differences in the slopes using an interaction term.
+
+```{r}
+m5 <- glmmTMB(area.cm2 ~ poly(date, 2) * site + (1|structure_fixed),
+                 data = df_1,
+                 ziformula = ~ 1,
+                 family = tweedie())
+
+```
+
+And to compare, a GAM model.
+
+```{r}
+m6 <- gam(area.cm2 ~ s(as.numeric(date), k = 5) + site + s(structure_fixed, bs = "re"),
+                 data = df_1,
+                 family = tw(link = "log"))
+      
+```         
+
+Another possible model is the Negative Binomial.
+
+```{r}
+m7 <- glmmTMB(area.cm2 ~ poly(date, 2) + site + (1|structure_fixed),
+                 data = df_1,
+                 ziformula = ~ 1,
+                 family = nbinom2())
+        
+```   
+
+Now, we can compare all the models using AIC and BIC.
+
+```{r}
+AIC(m0, m1, m2, m3, m4, m5, m6, m7)
+BIC(m0, m1, m2, m3, m4, m5, m6, m7)
+
+anova(m4, m5, test = "Chisq")
+```
+
+Both AIC and BIC indicate that m5 model is the best. This is the model with the interaction term. 
+The anova test also favors the this model.
+
+*Note: gamma models were tested by aggregating the data and calculating the mean
+area per structure, site and date (because gamma does not accept zeros). However, when comparing models those models, the tweedie model was the best one. That is, tweedie model was also fitted to the aggregated data to compare properly with gamma models. Those models showed the lowest AIC and BIC values but since they used summarised data the models with all observations were kept instead.
+
+```{r}
+# el modelo m4 (para arañas) es el mejor
+summary(m4)
+DHARMa::simulateResiduals(fittedModel = m4, plot = TRUE)
+```
+
+
+```{r, echo=FALSE, eval=FALSE}
+library(ggeffects)
+pred_trends <- ggpredict(m4, terms = c("date", "site"))
+
+ggplot(pred_trends, aes(x = x, y = predicted, color = group)) +
+  geom_line(linewidth = 1) +
+  geom_ribbon(aes(ymin = conf.low, ymax = conf.high, fill = group), alpha = 0.2) +
+  scale_color_manual(values = paleta[c(2,3)],
+                    labels = c("Güiri", "Playa Blanca")) +
+  scale_fill_manual(values = paleta[c(2,3)],
+                    labels = c("Güiri", "Playa Blanca")) +
+  labs(y = "Predicted area (cm²)", 
+       x = "Date",
+       title = "Different quadratic trends between sites") +
+  theme_classic() +
+  theme(legend.position = "top",
+        legend.title = element_blank())
+```
+
+Using sjPlot to plot the model
+
+```{r}
+plot_model(m4, type = "est", transform = NULL)
+
+# random effecrs, structure
+ranef(m5)
+plot_model(m4, type = "re", transform = NULL)
+```
+
+
+```{r}
+# If that fails, generate predictions manually:
+new_data <- expand.grid(site=levels(df_1$site),
+                        date = seq(as.Date("2021-01-01"),
+                                        as.Date("2024-05-01"),
+                                        by = "month"),
+                        structure_fixed=levels(df_1$structure_fixed))
+
+# Include poly() terms manually
+new_data$poly1 <- poly(df_1$date, 2)[,1][1:1148]
+new_data$poly2 <- poly(df_1$date, 2)[,2][1:1148]
+
+# Rename for consistency with model
+names(new_data)[which(names(new_data) == "poly1")] <- "poly(date, 2)1"
+names(new_data)[which(names(new_data) == "poly2")] <- "poly(date, 2)2"
+
+sigma_model <- sigma(m4)
+
+new_data$preds_log <- predict(m4, newdata = new_data, type = "response")
+new_data$preds <- exp(new_data$preds_log) # corregir escala
+
+# Plot with ggplot2
+p1 <- ggplot(new_data, aes(x = date, y = preds, col=site)) +
+  stat_summary(geom = "line", fun = "mean", linewidth = 1, ) +
+  labs(y = "Predicted area (cm²)", x = "Date")+
+  scale_color_manual(values = paleta,
+                     labels = c("Güiri-Güiri", "Playa Blanca"))+
+  stat_summary(geom = "line", fun = "mean", data = ) +
+  scale_x_date(date_labels = "%b %Y", date_breaks = "6 months") +
+  theme_classic()+
+  theme(legend.position = "top",
+        legend.title = element_blank(),
+        axis.ticks.x = element_blank(), 
+        axis.title.x = element_blank(),
+        #axis.text.x = element_blank()
+        )
+```
+
+```{r, echo=FALSE, eval=FALSE}
+df_1 |> ggplot(aes(x=date, y=area.cm2, col=site)) +
+  stat_summary(geom = "line", fun = "mean") +
+  geom_smooth(method = "loess", se=FALSE)+
+  theme_classic()+
+  theme(legend.position = "top")
+```
+
+
+Now, we need to model the data from the 3rd site which was removed before. Other sites are included are a comparison.
+
+Filter data so all sites have the same timeframe.
+
+```{r}
+df_2 <- df |> 
+  filter(date>="2022-01-01" & date<="2023-02-01") |> 
+  droplevels()
+```
+
+```{r}
+# Pasar datos a area total por estructura
+df_2 <- df_2 |> 
+  group_by(date, site, origin, structure_fixed) |> 
+  summarise(area.cm2 = sum(area.cm2, na.rm = T)) |> 
+  ungroup()
+
+hist(df_2$area.cm2)
+min(df_2$area.cm2)
+```
+
+Same model as before, because data includes zeros but now with polynomial terms of 3rd degree.
+
+```{r}
+# modelo para arañas, no lados
+m8 <- glmmTMB(area.cm2 ~ poly(date, 3) * site + (1|structure_fixed),
+              family = gaussian(),
+              data = df_2)
+
+m10 <- glmmTMB(area.cm2 ~ poly(date, 2) * site + (1|structure_fixed),
+              family = gaussian(),
+              data = df_2)
+
+m9 <- glmmTMB(log(area.cm2) ~ poly(date, 3) * site + (1|structure_fixed),
+              family = gaussian(),
+              data = df_2)
+
+```
+
+
+```{r}
+m11 <- glmmTMB(area.cm2 ~ poly(date, 3) * site + (1|structure_fixed),
+                 data = df_2,
+                 ziformula = ~ 1,
+                 family = tweedie())
+
+
+DHARMa::simulateResiduals(fittedModel = m11, plot = TRUE)
+summary(m8)
+```
+
+```{r}
+m12 <- glmmTMB(area.cm2 ~ poly(date, 3) * site + (1|structure_fixed),
+                 data = df_2,
+                 #ziformula = ~ 1,
+                 family = tweedie())
+
+
+DHARMa::simulateResiduals(fittedModel = m9, plot = TRUE)
+summary(m9)
+```
+
+
+```{r, echo=FALSE, eval=FALSE}
+# comparing with polynomial degree 2
+m10 <- glmmTMB(area.cm2 ~ poly(date, 2) * site + (1|structure_fixed),
+                 data = df_2,
+                 ziformula = ~ 1,
+                 family = tweedie())
+
+m11 <- glmmTMB(area.cm2 ~ poly(date, 2) * site + (1|structure_fixed),
+                 data = df_2,
+                 #ziformula = ~ 1,
+                 family = tweedie())
+
+m12 <- glmmTMB(area.cm2 ~ poly(date, 2) * site + (1|structure_fixed),
+                 data = df_2,
+                 #ziformula = ~ 1,
+                 family = Gamma(link = "log"))
+
+m13 <- glmmTMB(log(area.cm2) ~ poly(date, 2) * site + (1|structure_fixed),
+                 data = df_2,
+                 #ziformula = ~ 1,
+                 family = Gamma(link = "log"))
+
+AIC(m8, m9, m10, m11, m12)
+anova(m8, m9, test = "Chisq")
+```
+
+model 8 is the best one.
+
+```{r}
+# If that fails, generate predictions manually:
+new_data <- expand.grid(site=levels(df_2$site),
+                        date = seq(as.Date("2022-01-01"),
+                                        as.Date("2023-02-01"),
+                                        by = "month"),
+                        structure_fixed=levels(df_2$structure_fixed))
+
+# Include poly() terms manually
+new_data$poly1 <- poly(df_2$date, 3)[,1][1:1806]
+new_data$poly2 <- poly(df_2$date, 3)[,2][1:1806]
+new_data$poly3 <- poly(df_2$date, 3)[,3][1:1806]
+
+# Rename for consistency with model
+names(new_data)[which(names(new_data) == "poly1")] <- "poly(date, 3)1"
+names(new_data)[which(names(new_data) == "poly2")] <- "poly(date, 3)2"
+names(new_data)[which(names(new_data) == "poly3")] <- "poly(date, 3)3"
+
+new_data$preds <- predict(m12, newdata = new_data, type = "response")
+
+# Plot with ggplot2
+p2 <- ggplot(new_data, aes(x = date, y = preds, col=site)) +
+  stat_summary(geom = "line", fun = "mean", linewidth = 1) +
+  labs(y = "Predicted area (cm²)", x = "Date")+
+  scale_color_manual(values = paleta,
+                     labels = c("Güiri-Güiri", "Playa Blanca", "Playa Pelonas")) +
+  scale_x_date(date_labels = "%b %Y", date_breaks = "3 months") +
+  theme_classic()+
+  theme(legend.position = "top",
+        legend.title = element_blank(),
+        axis.ticks.x = element_blank(), 
+        axis.title.x = element_blank(),
+        #axis.text.x = element_blank()
+        )
+```
+
+
+```{r, echo=FALSE, eval=FALSE}
+df_2 |> 
+  ggplot(aes(x=date, y=area.cm2, col=site)) +
+  stat_summary(geom = "line", fun = "mean") +
+  #facet_wrap(~structure_fixed, ncol = 4) + 
+  geom_smooth(method = "loess", se=FALSE)+
+  theme_classic()+
+  theme(legend.position = "top")
+```
+
+sjPlot
+
+```{r}
+plot_model(m8, type = "est", transform = NULL)
+
+# random effecrs, structure
+ranef(m8)
+plot_model(m8, type = "re", transform = NULL)
+```
+
+
+## Anovas
+
+```{r}
+car::Anova(m4, type = "III")
+
+
+car::Anova(m11, type = "III")
+```
+
+## emmeans
+
+```{r}
+emm_res <- emmeans(m4, 
+                 pairwise ~ site | poly(date, 2),
+                 at = list(date = seq(as.Date("2021-01-01"),
+                                      as.Date("2024-06-01"),
+                                      by = "month")),
+                 adjust = "tukey", 
+                 type = "response")
+```
+
+```{r, echo=FALSE, eval=FALSE}
+df_1 |> ggplot()+
+  geom_boxplot(aes(x=site, y=area.cm2, fill=site)) +
+  scale_fill_manual(values = paleta[c(2,3)])+
+  theme_classic()+
+  theme(legend.position = "none") +
+  labs(x = "Site", y = "Area (cm²)")
+
+plot(emm_res)
+
+as.Date(19220, origin = "1970-01-01") # to check when is R doing the comparison
+```
+
+```{r}
+emm_df <- as.data.frame(emm_res$emmeans)
+emm_df$date <- as.Date(emm_df$date, origin = "1970-01-01")
+
+
+p3 <- ggplot(emm_df, aes(x = date, y = response, color = site, fill = site)) +
+  geom_errorbar(aes(ymin = lower.CL, ymax = upper.CL), 
+                width = 0.2, linewidth = 0.2) +
+  geom_point(size = 3) +
+  scale_fill_manual(values = paleta,
+                    labels = c("Güiri-Güiri", "Playa Blanca"),
+                    guide = "none") +
+  scale_color_manual(values = paleta,
+                     labels = c("Güiri-Güiri", "Playa Blanca")) +
+  labs(
+    #title = "Estimated Marginal Means Over Time",
+    x = "Date",
+    y = "Estimated Area (cm²)"
+  ) +
+  theme_classic() +
+  scale_x_date(date_labels = "%b %Y", date_breaks = "6 months") + 
+  theme(
+    legend.position = "top",
+    legend.title = element_blank(),
   )
 
-growth_rates <- growth_rates %>% filter(!is.na(origin)) %>% droplevels()
-
-View(growth_rates) 
 ```
 
 ```{r}
-hist(growth_rates$growth_rate)
-shapiro.test(growth_rates$growth_rate) # prueba normalidad
-as.data.frame(growth_rates) %>% ggplot(aes(x=growth_rate))+geom_density()
+emm_res2 <- emmeans(m8, 
+                 pairwise ~ site | poly(date, 2),
+                 at = list(date = seq(as.Date("2022-01-01"),
+                                      as.Date("2023-01-01"),
+                                      by = "month")),
+                 adjust = "tukey", 
+                 type = "response")
+
+emm_df2 <- as.data.frame(emm_res2$emmeans)
+emm_df2$date <- as.Date(emm_df2$date, origin = "1970-01-01")
+
+
+p4 <- ggplot(emm_df2, aes(x = date, y = emmean, color = site, fill = site)) +
+  geom_errorbar(aes(ymin = lower.CL, ymax = upper.CL), 
+                width = 0.2, linewidth = 0.2) +
+  geom_point(size = 3) +
+  scale_fill_manual(values = paleta,
+                    labels = c("Güiri-Güiri", "Playa Blanca", "Playa Pelonas"),
+                    guide = "none") +
+  scale_color_manual(values = paleta,
+                     labels = c("Güiri-Güiri", "Playa Blanca", "Playa Pelonas"))+
+  labs(
+    #title = "Estimated Marginal Means Over Time",
+    x = "Date",
+    y = "Estimated Area (cm²)"
+  ) +
+  theme_classic() +
+  scale_x_date(date_labels = "%b %Y", date_breaks = "3 months") +
+  theme(
+    legend.position = "top",
+    legend.title = element_blank(),
+  )
 ```
 
 ```{r}
-m0 <- lm(growth_rate~site,
-               #family = gaussian(link = "identity"),
-               data = growth_rates)
-
-m1 <- lm(growth_rate~origin,
-               #family = gaussian(link = "identity"),
-               data = growth_rates)
-
-m2 <- lm(growth_rate~site+origin,
-               #family = gaussian(link = "identity"),
-               data = growth_rates)
-
-m3 <- lm(growth_rate~site*origin,
-               #family = gaussian(link = "identity"),
-               data = growth_rates)
-
-m4 <- lm(growth_rate~site+origin+time_passed_years,
-               #family = gaussian(link = "identity"),
-               data = growth_rates)
-
-m5 <- lm(growth_rate~site*origin+time_passed_years,
-               #family = gaussian(link = "identity"),
-               data = growth_rates)
-
-AIC(m0, m1, m2, m3, m4, m5)
-lmtest::lrtest(m4, m5)
-lmtest::lrtest(m4, m3)
-```
-
-Usar m4
-
-```{r}
-m4 <- lm(growth_rate~site+origin+time_passed_years,
-               #family = gaussian(link = "identity"),
-               data = growth_rates)
-
-zero<-which(growth_rates$growth_rate<0)
-View(growth_rates[zero,])
+p1 / p3
 ```
 
 ```{r}
-df_aggregate %>%
-  filter(structure_fixed %in% c("16", "163", "164", "165", "166")) %>% 
-  ggplot(aes(x=date, y=area, col=origin))+
-  stat_summary(geom = "line", fun = "mean")+
-  stat_summary(geom = "point", fun = "mean")+
-  scale_colour_manual(values = paleta[c(3,1,2)])+
+p2 / p4
+```
+
+-----------------------------------------------------------------------------------
+
+
+# Mortality
+
+## Model
+
+Basic poisson model
+
+```{r}
+# remove zeros, zeros produce errors with the offset in the model
+df_1_2 <- df |> 
+  group_by(date, site, structure_fixed) |> 
+  filter(site != "Playa Pelonas") |> 
+  droplevels() |> 
+  summarise(mort. = sum(mort., na.rm = T),
+            num.frag = sum(num.frag, na.rm = T)) |> 
+  ungroup()
+
+# esto ya no hace falta porque ninguna araña tiene cero fragmetos
+df_1_2 <- df_1_2 |> 
+  filter(num.frag>0) |> 
+  droplevels()
+
+# el modelo si es importante, obviamente
+modelo_p <- glmmTMB(
+  mort. ~ date + site + offset(log(num.frag)) + (1 | structure_fixed),
+  family = poisson,
+  data = df_1_2)
+```
+
+Check overdisperssion
+
+```{r}
+performance::check_overdispersion(modelo_p)
+```
+
+Model is overdispersed so we need to use a Negative Binomial model instead.
+
+```{r}
+modelo_nb <- glmmTMB(
+  mort. ~ date + site + offset(log(num.frag)) + (1 | structure_fixed),
+  family = nbinom2,
+  data = df_1_2
+)
+```
+
+Check overdisperssion again
+
+```{r}
+performance::check_overdispersion(modelo_nb)
+```
+
+Model is not overdispersed, so we can use it.
+
+
+Check model
+
+```{r}
+summary(modelo_nb)
+DHARMa::simulateResiduals(fittedModel = modelo_nb, plot = TRUE)
+
+```
+
+```{r}
+plot_model(modelo_nb, type = "est", transform = NULL)
+
+# random effecrs, structure
+ranef(modelo_nb)
+plot_model(modelo_nb, type = "re", transform = NULL)
+```
+
+
+# Predictions
+
+```{r}
+# If that fails, generate predictions manually:
+new_data <- expand.grid(site=levels(df_1_2$site),
+                       date = seq(as.Date("2021-01-01"),
+                                        as.Date("2024-05-01"),
+                                        by = "month"),
+                       num.frag = seq(1, max(df_1_2$num.frag)),
+                        structure_fixed=levels(df_1_2$structure_fixed))
+
+
+new_data$preds <- predict(modelo_nb, newdata = new_data, type = "response")
+
+# Plot with ggplot2
+p5 <- ggplot(new_data, aes(x = date, y = preds, col=site)) +
+  stat_summary(geom = "line", fun = "mean", linewidth = 1) +
+  labs(y = "Dead fragments", x = "Date")+
+  scale_color_manual(values = paleta,
+                     labels = c("Güiri-Güiri", "Playa Blanca"))+
+  scale_x_date(date_labels = "%b %Y", date_breaks = "6 months") +
   theme_classic()+
-  facet_grid(~structure_fixed)+
+  theme(legend.position = "top",
+        legend.title = element_blank()) 
+```
+
+```{r, echo=FALSE, eval=FALSE}
+df_1_2|> 
+  ggplot(aes(x=date, y=mort., col=site)) +
+  stat_summary(geom = "line", fun = "mean") +
+  #facet_wrap(~structure_fixed, ncol = 4) + 
+  geom_smooth(method = "loess", se=FALSE)+
+  theme_classic()+
   theme(legend.position = "top")
 ```
 
 ```{r}
-new_data <- expand.grid(site=levels(growth_rates$site),
-                        origin=levels(growth_rates$origin),
-                        time_passed_years=seq(min(growth_rates$time_passed_years),
-                                               max(growth_rates$time_passed_years),
-                                               0.01))
+car::Anova(modelo_nb, type = "III")
+```
 
-new_data$predict <- predict(m4, new_data)
+
+```{r}
+emm_res3 <- emmeans(modelo_nb, 
+                 pairwise ~ site | poly(date, 2),
+                 at = list(date = seq(as.Date("2021-01-01"),
+                                      as.Date("2024-05-01"),
+                                      by = "month")),
+                 adjust = "tukey", 
+                 type = "response")
+
+emm_df3 <- as.data.frame(emm_res3$emmeans)
+emm_df3$date <- as.Date(emm_df3$date, origin = "1970-01-01")
+
+
+p6 <- ggplot(emm_df3, aes(x = date, y = response, color = site, fill = site)) +
+  geom_errorbar(aes(ymin = asymp.LCL, ymax = asymp.UCL), width = 0.2, linewidth = 0.2) +
+  geom_point(size = 3) +
+  scale_fill_manual(values = paleta,
+                    labels = c("Güiri-Güiri", "Playa Blanca"),
+                    guide = "none") +
+  scale_color_manual(values = paleta,
+                     labels = c("Güiri-Güiri", "Playa Blanca"))+
+  labs(
+    #title = "Estimated Marginal Means Over Time",
+    x = "Date",
+    y = "Dead fragments per structure"
+  ) +
+  theme_classic() +
+  scale_x_date(date_labels = "%b %Y", date_breaks = "6 months") +
+  theme(
+    legend.position = "top",
+    legend.title = element_blank(),
+  )
 ```
 
 ```{r}
-p <- new_data %>% ggplot(aes(time_passed_years, predict)) +
-  geom_point(aes(colour=origin)) +
-  geom_line(aes(colour = origin))+
-  facet_wrap(~site, nrow = 2, scales="free_y") + 
-  labs(x = "Tiempo", y = "Crecimiento") +
-  theme_bw()
+p5 / p6
+```
 
-p
+
+```{r}
+# zeros produce errors with the offset in the model. No importa
+df_2_2 <- df_2 |> 
+  filter(num.frag>0) |> 
+  droplevels()
+
+# Filtrar datos para comparar Pelonas
+df_2_2 <- df |> 
+  filter(date>="2022-01-01" & date<="2023-02-01") |> 
+  droplevels()
+
+df_2_2 <- df_2_2 |> 
+  group_by(date, site, structure_fixed) |>
+  summarise(mort. = sum(mort., na.rm = T),
+            num.frag = sum(num.frag, na.rm = T)) |> 
+  ungroup()
+
+modelo_p2 <- glmmTMB(
+  mort. ~ date + site + offset(log(num.frag)) + (1 | structure_fixed),
+  family = poisson,
+  data = df_2_2
+)
+
 ```
 
 ```{r}
-modelo_con_interaccion<-lm(growth_rate~site*origin+time_passed_years,
-               #family = gaussian(link = "identity"),
-               data = growth_rates)
+performance::check_overdispersion(modelo_p2) # No overdispersion
+summary(modelo_p2)
+car::Anova(modelo_p2, type = "III")
+```
 
-modelo_sin_interaccion <- lm(growth_rate ~ site + origin + time_passed_years, data = growth_rates)
 
-anova(modelo_sin_interaccion, modelo_con_interaccion)
+```{r}
+emm_res4 <- emmeans(modelo_p2, 
+                 pairwise ~ site | poly(date, 2),
+                 at = list(date = seq(as.Date("2023-01-01"),
+                                      as.Date("2024-01-01"),
+                                      by = "month")),
+                 adjust = "tukey", 
+                 type = "response")
 
-# Solamente el intercepto varía
+emm_df4 <- as.data.frame(emm_res4$emmeans)
+emm_df4$date <- as.Date(emm_df4$date, origin = "1970-01-01")
+
+
+p7 <- ggplot(emm_df4, aes(x = date, y = rate, color = site, fill = site)) +
+  geom_errorbar(aes(ymin = asymp.LCL, ymax = asymp.UCL), width = 0.2, linewidth = 0.2) +
+  geom_point(size = 3) +
+  scale_fill_manual(values = paleta,
+                     labels = c("Güiri-Güiri", "Playa Blanca", "Playa Pelonas"),
+                     guide = "none")+
+  scale_color_manual(values = paleta,
+                     labels = c("Güiri-Güiri", "Playa Blanca", "Playa Pelonas"))+
+  labs(
+    #title = "Estimated Marginal Means Over Time",
+    x = "Date",
+    y = "Mean absolute mortality"
+  ) +
+  theme_classic() +
+  scale_x_date(date_labels = "%b %Y", date_breaks = "3 months") +
+  theme(
+    legend.position = "top",
+    legend.title = element_blank(),
+  )
 ```
 

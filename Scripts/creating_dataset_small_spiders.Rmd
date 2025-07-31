@@ -110,6 +110,14 @@ final_ds2_p <- final_ds2_p %>%
     filter(between(date, as_date("2021-01-01"), as_date("2024-06-01")))
 ```
 
+Por último, es necesario censurar los nombres de los digitadores.
+
+```{r}
+levels(final_ds2_p$data_entry_person)<-paste("Digitador",
+                                           as.character(seq(1,11,1)), 
+                                           sep = "_")
+```
+
 Save the final dataset as a new csv.
 
 ```{r}

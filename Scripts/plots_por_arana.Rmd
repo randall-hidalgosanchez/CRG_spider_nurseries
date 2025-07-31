@@ -1,0 +1,263 @@
+---
+title: "Plots"
+author: "R. Hidalgo"
+date: "`r Sys.Date()`"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+```
+
+# General Plots 
+
+```{r, echo=TRUE, eval=TRUE}
+library(tidyverse)
+
+#setwd("C:/Users/User/Desktop/Git/CRG_spider_nurseries")
+
+big <- read_csv("./Datasets/big_spiders.csv")
+small <- read_csv("./Datasets/small_spiders.csv")
+
+paleta <- c("Playa Blanca" = "#192639", 
+            "Playa Pelonas" = "#4EBCB8", 
+            "Guiri" = "#FA9938", 
+              "Cacique" = "#9E1B32")
+
+big <- big |>  
+  mutate(structure=as.factor(structure),
+         structure_fixed=as.factor(structure_fixed),
+         site=as.factor(site),
+         face=as.factor(face),
+         origin=as.factor(origin),
+         data_entry_person=as.factor(data_entry_person),
+         month=as.factor(month),
+         year=as.factor(year),
+         .keep = "unused")
+
+small <- small %>% 
+  mutate(structure=as.factor(structure),
+         site=as.factor(site),
+         data_entry_person=as.factor(data_entry_person),
+         month=as.factor(month),
+         year=as.factor(year),
+         #date=lubridate::as_date(df$date),
+         .keep = "unused")
+```
+
+
+## Growth over time: mean area per month
+
+
+```{r}
+# plot con area por araña, no por lado 
+
+df_total <- big |> 
+  group_by(date, site, origin, structure_fixed) |> 
+  summarise(area_str = sum(area.cm2, na.rm = T)) |> 
+  ungroup()
+
+df_plot1 <- df_total |>  
+  group_by(date, site) %>% 
+  summarise(mean_area = mean(area_str, na.rm = TRUE)) %>% 
+  ungroup()
+
+tiff("./Results/Plots/mean_growth.tiff", width = 2000, height = 1200, res = 300)
+
+df_plot1 |> 
+  ggplot() +
+  geom_line(aes(y=mean_area, x=as.Date(date), color=site))+
+  geom_point(aes(y=mean_area, x=as.Date(date), color=site))+
+  theme_classic()+
+  labs(x = "Date", y = "Mean Area per structure (cm²)") +
+  scale_color_manual(values = paleta,
+                     labels = c("Güiri-Güiri", "Playa Blanca", "Playa Pelonas")) +
+  scale_x_date(date_labels = "%b %Y", date_breaks = "6 months") +
+  theme(legend.position = "top",
+        legend.title = element_blank(),
+        plot.title = element_text(hjust = 0.5, size = 16),
+        axis.text.x = element_text(angle = 45, hjust = 1)) 
+
+dev.off()
+```
+
+## Growth by origin: mean area per month (ending in November 2023)
+
+```{r}
+library(RColorBrewer)
+
+df_plot2 <- df_total %>% 
+  filter(date <= as.Date("2023-11-30"),
+         !is.na(origin)) %>% 
+  group_by(date, site, origin) %>% 
+  summarise(mean_area = mean(area_str, na.rm = TRUE)) %>% 
+  ungroup()
+
+t_palette <- RColorBrewer::brewer.pal(3, "Dark2")
+
+tiff("./Results/Plots/origen.tiff", width = 2000, height = 1200, res = 300)
+
+df_plot2 |> ggplot() +
+  geom_line(aes(x = date, y = mean_area, color = origin), linewidth = 1) +
+  geom_point(aes(x = date, y = mean_area, color = origin), size = 2) +
+  labs(x = "Date", y = "Mean Area per structure (cm²)") +
+  theme_classic() +
+  scale_color_manual(values = t_palette, 
+                     labels = c("Playa Jícaro", "Marina", "Playa Matapalo")) +
+  scale_x_date(date_labels = "%b %Y", date_breaks = "6 months") +
+  facet_wrap(~site, nrow = 1) +
+  theme(legend.position = "top",
+        legend.title = element_blank(),
+        plot.title = element_text(hjust = 0.5, size = 16),
+        axis.text.x = element_text(angle = 45, hjust = 1),
+        #strip.background = element_rect(fill = "lightgrey"),
+        panel.border = element_rect(color = "black", fill = NA, linewidth = 0.5))
+
+dev.off()
+```
+
+## Growth over time: mean area per month (small spiders)
+
+```{r}
+df <- small %>%
+  filter(site=="Playa Blanca") |> 
+  group_by(date) %>% 
+  summarise(mean_area = mean(area.cm2, na.rm = TRUE)) %>% 
+  ungroup()
+
+tiff("./Results/Plots/small_mean.tiff", width = 2000, height = 1200, res = 300)
+
+df |> ggplot() +
+  geom_line(aes(x = date, y = mean_area), color = "#192639", linewidth = 1) +
+  geom_point(aes(x = date, y = mean_area), color = "#192639", size = 2) +
+  labs(x = "Date", y = "Mean Area (cm²)") +
+  theme_classic() +
+  #scale_color_manual(values = paleta,labels = c("Punta Cacique", "Playa Blanca")) +
+  scale_x_date(date_labels = "%b %Y", date_breaks = "6 months") +
+  theme(legend.position = "top",
+        legend.title = element_blank(),
+        plot.title = element_text(hjust = 0.5, size = 16),
+        axis.text.x = element_text(hjust = 1)) 
+
+dev.off()
+```
+
+
+# Big structures over time.
+
+From here, these are models plots
+
+## Growth Model 1: Playa Blanca, Güiri.
+
+```{r}
+tiff("./Results/Plots/overtime.tiff", width = 2000, height = 1200, res = 300)
+p3
+dev.off()
+```
+
+## Growth Model 2: Playa Blanca, Güiri, and Playa Pelonas.
+
+```{r}
+tiff("./Results/Plots/overtime3.tiff", width = 2000, height = 1200, res = 300)
+p4
+dev.off()
+```
+
+## Mortality Model 3: Playa Blanca and Güiri.
+
+```{r}
+tiff("./Results/Plots/mortality6.tiff", width = 2400, height = 1200, res = 300)
+p6
+dev.off()
+```
+
+## Mortality Model 4: Playa Blanca, Güiri, and Playa Pelonas.
+
+```{r}
+tiff("./Results/Plots/mortality4.tiff", width = 2000, height = 1200, res = 300)
+p7
+dev.off()
+```
+
+# Small structures over time.
+
+```{r}
+
+```
+
+## Model 1: Playa Blanca.
+
+```{r}
+
+```
+
+## Model 2: Cacique.
+
+```{r}
+
+```
+
+
+__________________________________________________________________________________
+
+
+# Calculate growth rate using the whole data
+
+```{r}
+# This calculates the growth rate of the mean area 
+# of big spiders per site and date as a percentage change from the previous month.
+# percentage of change = (current - previous) / previous * 100
+library(gt)
+
+tabla <- df_total %>% 
+  group_by(date, site) %>% 
+  summarise(mean_area = mean(area_str, na.rm = TRUE)) %>% 
+  ungroup() %>% 
+  arrange(site, date) |> 
+  mutate(growth_rate = (mean_area - lag(mean_area)) / lag(mean_area) * 100) %>% 
+  arrange(date) |> 
+  pivot_wider(names_from = site, 
+              values_from = c(mean_area, growth_rate)) %>%
+  select(date, mean_area_Guiri, growth_rate_Guiri, 
+         `mean_area_Playa Blanca`, `growth_rate_Playa Blanca`, 
+         `mean_area_Playa Pelonas`, `growth_rate_Playa Pelonas`) 
+
+tabla %>% 
+  mutate(across(everything(), ~ round(.x, 2))) %>%
+  gt()
+
+dim(tabla)
+```
+
+```{r}
+library(dplyr)
+library(lubridate)
+
+# Assuming your data is in a dataframe 'coral_data' with 'date' and 'coral_cover' columns
+data <- df_total %>%
+  mutate(year = year(date)) %>%  # Extract year from the date
+  group_by(year) %>%             # Group by year
+  summarise(annual_cover = last(area_str)) # Use the last measurement in each year
+
+# Calculate annual growth rate
+data %>%
+  arrange(year) %>%
+  mutate(growth_rate = (annual_cover - lag(annual_cover)) / lag(annual_cover) * 100) %>%
+  filter(!is.na(growth_rate))
+
+```
+
+```{r}
+df_total %>%
+  mutate(year = year(date)) %>% 
+  group_by(year) %>%
+  summarise(annual_cover = last(area_str)) %>%
+  arrange(year) %>%
+  mutate(avg_growth_rate = (annual_cover - lag(annual_cover)) / 1) %>%  # 1 year between measurements
+  filter(!is.na(avg_growth_rate))
+
+```
+
+
