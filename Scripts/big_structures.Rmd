@@ -130,13 +130,13 @@ df1 <- df1 |>
   filter(structure_fixed!="105")
 ```
 
-Many other structures have numerous observations but they do not comprehend all the entire time. Thus, only structures with data from january 2021 to may 2024 (because there's no data for june, from Güiri)
+Many other structures have numerous observations but they do not comprehend all the entire time. Thus, only structures with data from january 2021 to june 2024 (because there's no data for june, from Güiri)
 
 ```{r}
 df_1 <- df1 |> 
   filter(as.numeric(as.character(structure_fixed)) 
          %in% c(6:15, 169:172)) |> 
-  filter(date<="2024-05-01") |> 
+  filter(date<="2024-06-01") |> 
   droplevels()
 ```
 
@@ -510,7 +510,7 @@ plot_model(m8, type = "re", transform = NULL)
 car::Anova(m4, type = "III")
 
 
-car::Anova(m11, type = "III")
+car::Anova(m8, type = "III")
 ```
 
 ## emmeans
@@ -620,6 +620,7 @@ Basic poisson model
 
 ```{r}
 # remove zeros, zeros produce errors with the offset in the model
+# sumar por araña
 df_1_2 <- df |> 
   group_by(date, site, structure_fixed) |> 
   filter(site != "Playa Pelonas") |> 
@@ -650,7 +651,7 @@ Model is overdispersed so we need to use a Negative Binomial model instead.
 
 ```{r}
 modelo_nb <- glmmTMB(
-  mort. ~ date + site + offset(log(num.frag)) + (1 | structure_fixed),
+  mort. ~ date * site + offset(log(num.frag)) + (1 | structure_fixed),
   family = nbinom2,
   data = df_1_2
 )
@@ -764,9 +765,7 @@ p5 / p6
 
 ```{r}
 # zeros produce errors with the offset in the model. No importa
-df_2_2 <- df_2 |> 
-  filter(num.frag>0) |> 
-  droplevels()
+# df_2_2 <- df_2 |> filter(num.frag>0) |> droplevels()
 
 # Filtrar datos para comparar Pelonas
 df_2_2 <- df |> 
@@ -797,8 +796,8 @@ car::Anova(modelo_p2, type = "III")
 ```{r}
 emm_res4 <- emmeans(modelo_p2, 
                  pairwise ~ site | poly(date, 2),
-                 at = list(date = seq(as.Date("2023-01-01"),
-                                      as.Date("2024-01-01"),
+                 at = list(date = seq(as.Date("2022-01-01"),
+                                      as.Date("2023-01-01"),
                                       by = "month")),
                  adjust = "tukey", 
                  type = "response")
