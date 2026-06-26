@@ -60,9 +60,12 @@ pCacique<-pCacique[-NAs,]
 # View(pCacique[NAs,])
 ```
 
-The first 7 rows of Blanca's dataset were measured by side so I'll remove those records (actually 8, but 1 of those was removed due to being a tag)
+The first 7 rows of Blanca's dataset were measured by side so I'll remove those records (actually 8, but 1 of those was removed due to being a tag).
 
-```{r}
+ESTO SE ARREGLÓ CUANDO SE MEZCLARON DATASETS EN ENERO 2026, NO HACE FALTA ELIMINAR LAS SIETE FILAS.
+
+```{r, echo=F, eval=F}
+# No correr esto
 pBlanca<-pBlanca[-(1:7),]
 ```
 
@@ -100,21 +103,24 @@ final_ds2_p<-final_ds_p %>%
 
 ```
 
-Now, we want to keep data from January 2020 to June 2024 
+Now, we want to keep data from January 2020 to June 2026 (indico 2026 porque quiero mantener todo) 
 
 ```{r}
 final_ds2_p$date <- paste(final_ds2_p$year, final_ds2_p$month, sep = "-")
 final_ds2_p$date <- ym(final_ds2_p$date)
 
 final_ds2_p <- final_ds2_p %>% 
-    filter(between(date, as_date("2021-01-01"), as_date("2024-06-01")))
+    filter(between(date, as_date("2021-01-01"), as_date("2026-06-01")))
 ```
 
 Por último, es necesario censurar los nombres de los digitadores.
 
 ```{r}
+maximo <- length(levels(final_ds2_p$data_entry_person))
 levels(final_ds2_p$data_entry_person)<-paste("Digitador",
-                                           as.character(seq(1,11,1)), 
+                                           as.character(seq(1,
+                                                            maximo,
+                                                            1)), 
                                            sep = "_")
 ```
 

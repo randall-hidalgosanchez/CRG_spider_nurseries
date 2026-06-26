@@ -150,24 +150,25 @@ final_ds2<-final_ds %>%
 
 ```
 
-Remove data analysed by Patricia, Andrea C. and Carmen. Patricia's data were recorded using wrong scales, whilst Andrea and Carmen's data are the same as Chiara's.
+Remove data analysed by Patricia, Andrea C. and Carmen. Patricia's data were recorded using wrong scales, whilst Andrea and Carmen's data are the same as Chiara's. I don't even know what Shantall was doing...
 
 ```{r}
 levels(final_ds2$data_entry_person)
 
 final_ds2 <- final_ds2 %>% 
-  filter(!data_entry_person %in% c("Patricia", "Andrea C.", "Carmen")) %>% 
+  filter(!data_entry_person %in% c("Patricia", "Andrea C.", 
+                                   "Carmen", "Shantall")) %>% 
   droplevels()
 ```
 
-Now, we want to keep data from January 2020 to June 2024 
+Now, we want to keep data from January 2020 to June 2026 (indico 2026 porque quiero mantener todos los datos) 
 
 ```{r}
 final_ds2$date <- paste(final_ds2$year, final_ds2$month, sep = "-")
 final_ds2$date <- ym(final_ds2$date)
 
 final_ds2 <- final_ds2 %>% 
-    filter(between(date, as_date("2021-01-01"), as_date("2024-06-01")))
+    filter(between(date, as_date("2021-01-01"), as_date("2026-06-01")))
 ```
 
 Varias fotografías están repetidas y con datos, por la misma persona.

@@ -77,8 +77,16 @@ plots[[5]]
 ```
 
 
+# Plot general
+
 ```{r}
-df_s %>% 
+
+```
+
+
+
+```{r}
+df_s |>  
   ggplot(aes(x=date, y=area.cm2, col=site)) +
   stat_summary(geom = "line", fun = "mean") +
   facet_wrap(~structure, ncol = 4)
