@@ -27,6 +27,13 @@ blanca_big <- blanca_big |>
   droplevels()
 
 
+# Guiri tiene varios datos con áreas pero no información de fragmentos
+# Estos tampoco tienen un digitador. Debido a falta de datos se van a 
+# eliminar.
+guiri_big <- guiri_big |> 
+    filter(!is.na(digitador))
+
+
 # Algunas etiquetas han sido reemplazadas y "str.code" representa eso
 # Por lo que es necesario reasignar el numero para que haya continuidad
 # y evitar errores debido a que la etiqueta dice algo como "17 (103)"
