@@ -110,3 +110,4 @@ final_big$origin <- asign_origin(final_big$str.code)
 
 # guardar los datos como objeto RDS para mantener los atributos
 saveRDS(final_big, "data/processed/final_big.rds")
+
