@@ -45,3 +45,4 @@ big_agg <- big_agg |>
 
 # guardar los datos como objeto RDS para mantener los atributos
 saveRDS(big_agg, "data/processed/big_agg.rds")
+
