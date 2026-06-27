@@ -57,3 +57,4 @@ final_small <- final_small |>
 
 # guardar los datos como objeto RDS para mantener los atributos
 saveRDS(final_small, "data/processed/final_small.rds")
+
