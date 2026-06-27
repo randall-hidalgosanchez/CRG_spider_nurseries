@@ -28,3 +28,4 @@ fix_structure <- function(actual) {
     
     original
 }
+
