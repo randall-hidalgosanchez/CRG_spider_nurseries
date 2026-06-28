@@ -1,1 +1,27 @@
-CRG
+# CRG
+
+Análisis de estructuras metálicas como viveros para el crecimiento de corales de arrecife.  
+
+## Estructura general  
+
+### Data
+Los datos crudos no se encuentran en el repositorio debido a su caracter confidencial.  
+
+
+### Scripts
+- 00: contiene los paquetes necesarios a lo largo del proyecto  
+- 01: carga y limpia los datos correspondientes con las estructuras grandes  
+- 02: carga y limpia los datos correspondientes con las estructuras pequeñas  
+- 03: las estructuras grandes mantienen datos por cara, este script agrupa los datos para representar datos por estructura  
+- 04: muestra algunos datos exploratorios incluyendo visualizaciones  
+- 05: construcción y comparación de modelos para elegir el más adecuado  
+- 06: este script presenta únicamente los modelos seleccionados así como su visualización  
+- funciones: dos scripts (asign_origin) y (fix_structure). El primero, asigna el sitio de origen con base en el código de estructura; sin embargo, muchos códigos carecen de dicha información. La segunda función busca arreglar inconsistencias en el registro de las estructuras. Por ejemplo, cuando ocurren cambios de etiquetas  
+
+### Results
+
+contiene los gráficos generados, tanto de las visualizaciones exploratorias como de los modelos.
+
+### Reporte
+
+Breve reporte
